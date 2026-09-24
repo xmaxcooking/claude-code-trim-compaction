@@ -1,0 +1,65 @@
+{
+  "name": "trim-compaction",
+  "version": "0.2.0",
+  "description": "Compaction without a summary where possible: trims old tool outputs and stubs old edits, keeps every message word for word, and only falls back to Claude's summary (of the trimmed history) when that is not enough.",
+  "license": "MIT",
+  "author": { "name": "xmaxcooking", "url": "https://github.com/xmaxcooking" },
+  "repository": "https://github.com/xmaxcooking/claude-code-trim-compaction",
+  "keywords": ["compaction", "context", "trim"],
+  "userConfig": {
+    "compactAtPercent": {
+      "type": "number",
+      "title": "Compaction percentage",
+      "description": "Context percentage at which a finished turn compacts.",
+      "default": 60
+    },
+    "targetPercent": {
+      "type": "number",
+      "title": "Target percentage",
+      "description": "If the trimmed history fits under this share of the context window, it replaces the history word for word; otherwise Claude's summary runs on the trimmed history.",
+      "default": 40
+    },
+    "preserveRecentMessages": {
+      "type": "number",
+      "title": "Recent messages to preserve",
+      "description": "Number of newest messages never touched.",
+      "default": 6
+    },
+    "minResultChars": {
+      "type": "number",
+      "title": "Minimum output size",
+      "description": "Tool outputs shorter than this many characters are left alone.",
+      "default": 1000
+    },
+    "truncateHeadChars": {
+      "type": "number",
+      "title": "Trimmed output head",
+      "description": "Characters of a trimmed tool output that stay.",
+      "default": 300
+    },
+    "stubEdits": {
+      "type": "boolean",
+      "title": "Stub old edits",
+      "description": "Replace the text of old Edit/Write calls with a note; the change is already in the file.",
+      "default": true
+    },
+    "minInputChars": {
+      "type": "number",
+      "title": "Minimum edit size",
+      "description": "Edits shorter than this many characters are left alone.",
+      "default": 1000
+    },
+    "protectedTools": {
+      "type": "string",
+      "title": "Protected tools",
+      "description": "Comma-separated tools whose output is never trimmed.",
+      "default": "Task, Agent, TodoWrite, ExitPlanMode, Skill"
+    },
+    "dryRun": {
+      "type": "boolean",
+      "title": "Dry run",
+      "description": "Log what would happen, but always use Claude's summary on the untrimmed history.",
+      "default": false
+    }
+  }
+}

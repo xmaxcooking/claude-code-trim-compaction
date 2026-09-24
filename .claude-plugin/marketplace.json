@@ -1,0 +1,17 @@
+{
+  "name": "claude-code-trim-compaction",
+  "description": "Trim-based context compaction for Claude Code.",
+  "owner": {
+    "name": "xmaxcooking",
+    "url": "https://github.com/xmaxcooking"
+  },
+  "plugins": [
+    {
+      "name": "trim-compaction",
+      "source": "./",
+      "description": "Trims old tool outputs and edits instead of summarising.",
+      "version": "0.2.0",
+      "license": "MIT"
+    }
+  ]
+}

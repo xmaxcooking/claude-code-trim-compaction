@@ -1,0 +1,23 @@
+{
+  "name": "claude-code-trim-compaction",
+  "version": "0.2.0",
+  "private": true,
+  "description": "Trim-based context compaction for Claude Code: old tool outputs and edits are trimmed instead of summarised.",
+  "type": "module",
+  "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.hooks.json",
+    "dry-run": "tsx scripts/dry-run.ts",
+    "validate:plugin": "claude plugin validate ."
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}
