@@ -1,35 +1,98 @@
 # claude-code-trim-compaction
 
-A Claude Code plugin, `trim-compaction`, that compacts a long session by
-trimming instead of summarising. Old tool outputs are cut to their first lines
-and old edit contents become one-line stubs. Every message you and Claude
-wrote stays word for word. No model is involved, so it runs in milliseconds
-and uses no tokens.
-
-The repo started as an attempt to let local
-[Laya](https://huggingface.co/convaiinnovations/laya) models decide what to
-cut. The study that followed found that trimming by rule does what a
-fine-tuned Laya would do, so the plugin uses the rule. See
-[What happened to Laya](#what-happened-to-laya).
+A Claude Code plugin that keeps long sessions going by trimming old content
+instead of summarizing it.
 
 ## What it does
 
-When a turn ends with the context at 60% or more, or when you run `/compact`:
+Claude Code has a context window: a limit on how much conversation it can
+hold. When a long session gets close to that limit, Claude Code normally
+"compacts" by asking a model to summarize everything so far. That takes time,
+costs tokens, and rewrites details in its own words.
 
-1. **Trim.** Outside the newest 6 messages:
-   - Every tool output of 1,000+ characters is cut to its first 300
-     characters plus a note (`[trim-compaction truncated N chars of this
-     tool result; re-run the tool if needed]`).
-   - Every `Edit`/`Write`/`MultiEdit`/`NotebookEdit` input of 1,000+
-     characters keeps its file path, and its long text fields become
-     `[compacted: N chars; the change is in the file, read it for the current
-     content]`.
+This plugin trims instead. When a turn ends with the context mostly full (60%
+by default), or when you run `/compact`, it goes through everything except the
+newest 6 messages and shrinks two kinds of content:
 
-   Subagent reports, the todo list, plans and skills are never trimmed.
-2. **Decide.** If the trimmed history fits under 40% of the context window, it
-   replaces the history word for word, with no summary. If it doesn't, Claude
-   Code's own summary runs on the trimmed history, which is smaller, so the
-   summary is faster and cheaper than usual.
+- **Old tool outputs** (like a big file read) are cut down to their first 300
+  characters, with a note that they were trimmed.
+- **Old edit contents** (the before/after text of a code change) are replaced
+  with a short note that the file was changed.
+
+Every message you and Claude actually typed stays exactly as written. If the
+trimmed history is now small enough (under 40% of the window), it's used as
+is, with no summary at all. If it's still too big, Claude Code's normal
+summarizer runs on it — but since it's already smaller, that's faster and
+cheaper than usual.
+
+This works because, in testing, old tool outputs and edit contents turned out
+to almost never be needed again in full (about 99.4% of the time, trimming
+them loses nothing useful). If Claude does need the exact content later, it
+just re-reads the file or re-runs the command.
+
+### Examples
+
+**A tool output.** Claude reads a file early in the session. The result is
+long, so once it's old enough it gets cut to its first lines:
+
+```text
+Before:
+  1  import { readConfig } from "./config";
+  2  import { connectDb } from "./db";
+  3
+  4  export async function startServer(options: ServerOptions) {
+  5    const config = readConfig(options.configPath);
+  6    const db = await connectDb(config.dbUrl);
+  7    ... (1,400 more characters of file content) ...
+
+After:
+  1  import { readConfig } from "./config";
+  2  import { connectDb } from "./db";
+  3
+  4  export async function startServer(options: ServerOptions) {
+  5    const config = readConfig(options.configPath);
+  6    const db = await connectDb(config.dbUrl);
+  [trim-compaction truncated 1,400 chars of this tool result; re-run the
+  tool if needed]
+```
+
+The fact that Claude read the file, and anything it said about it afterwards
+("the server reads config from `startServer`..."), is untouched. Only the raw
+file text past the first 300 characters is gone — Claude re-reads the file if
+it needs those exact lines again.
+
+**An edit.** Claude changes a function. The call that made the change is
+long, so once it's old enough its text is replaced with a stub, but the file
+path stays:
+
+```text
+Before:
+  Edit(file_path: "src/server.ts",
+       old_string: "function parseConfig(raw: string) {\n  ... 40 lines ...\n}",
+       new_string: "function parseConfig(raw: string): Config {\n  ... 55 lines, now with validation ...\n}")
+
+After:
+  Edit(file_path: "src/server.ts",
+       old_string: "[compacted: 612 chars; the change is in the file, read it
+                     for the current content]",
+       new_string: "[compacted: 840 chars; the change is in the file, read
+                     it for the current content]")
+```
+
+Your instruction ("add validation to parseConfig") and Claude's explanation
+of what it changed stay word for word in the conversation. Only the literal
+before/after code text of the edit itself is replaced — the current code is
+in the file, not the chat history, so that's where Claude looks if it needs
+it again.
+
+### How
+
+Each tool call and edit in the transcript is a separate JSON record, so the
+hook can rewrite the long text fields of old records in place without
+touching anything else: the surrounding messages, their order, and anything
+inside the newest 6 messages are left exactly as they were. No model reads or
+rewrites the conversation — it's plain string truncation, which is why it
+runs in milliseconds.
 
 Measured on four long real sessions (376 to 974 tool calls), with the default
 options:
