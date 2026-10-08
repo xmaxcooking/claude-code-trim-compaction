@@ -22,44 +22,95 @@ newest 6 messages and shrinks two kinds of content:
 Every message you and Claude actually typed stays exactly as written. If the
 trimmed history is now small enough (under 40% of the window), it's used as
 is, with no summary at all. If it's still too big, Claude Code's normal
-summarizer runs on it — but since it's already smaller, that's faster and
+summarizer runs on it, but since it's already smaller, that's faster and
 cheaper than usual.
 
-This works because, in testing, old tool outputs and edit contents turned out
-to almost never be needed again in full (about 99.4% of the time, trimming
-them loses nothing useful). If Claude does need the exact content later, it
-just re-reads the file or re-runs the command.
+This works because, in testing, old tool outputs and edit contents were
+almost never needed again in full (about 99.4% of the time, trimming them
+loses nothing useful). If Claude does need the exact content later, it just
+re-reads the file or re-runs the command.
 
 ### Examples
 
-**A tool output.** Claude reads a file early in the session. The result is
-long, so once it's old enough it gets cut to its first lines:
+**A tool output.** Claude reads `src/rateLimiter.ts`, a 1,164-character file.
+That's over the 1,000-character minimum, so once the call is old enough, the
+result is cut to its first 300 characters and a note. The other 864
+characters, which is most of the actual logic, are gone from the transcript:
 
 ```text
-Before:
-  1  import { readConfig } from "./config";
-  2  import { connectDb } from "./db";
-  3
-  4  export async function startServer(options: ServerOptions) {
-  5    const config = readConfig(options.configPath);
-  6    const db = await connectDb(config.dbUrl);
-  7    ... (1,400 more characters of file content) ...
+Before (full 1,164-character tool result):
+  import { Clock } from "./clock";
 
-After:
-  1  import { readConfig } from "./config";
-  2  import { connectDb } from "./db";
-  3
-  4  export async function startServer(options: ServerOptions) {
-  5    const config = readConfig(options.configPath);
-  6    const db = await connectDb(config.dbUrl);
-  [trim-compaction truncated 1,400 chars of this tool result; re-run the
+  export class RateLimiter {
+    private tokens: number;
+    private lastRefill: number;
+
+    constructor(
+      private readonly capacity: number,
+      private readonly refillPerSecond: number,
+      private readonly clock: Clock = new Clock(),
+    ) {
+      this.tokens = capacity;
+      this.lastRefill = clock.now();
+    }
+
+    tryAcquire(cost = 1): boolean {
+      this.refill();
+      if (this.tokens < cost) return false;
+      this.tokens -= cost;
+      return true;
+    }
+
+    private refill(): void {
+      const now = this.clock.now();
+      const elapsed = (now - this.lastRefill) / 1000;
+      this.tokens = Math.min(this.capacity, this.tokens + elapsed * this.refillPerSecond);
+      this.lastRefill = now;
+    }
+
+    availableTokens(): number {
+      this.refill();
+      return Math.floor(this.tokens);
+    }
+
+    reset(): void {
+      this.tokens = this.capacity;
+      this.lastRefill = this.clock.now();
+    }
+  }
+
+After (the same 300 characters, then a note):
+  import { Clock } from "./clock";
+
+  export class RateLimiter {
+    private tokens: number;
+    private lastRefill: number;
+
+    constructor(
+      private readonly capacity: number,
+      private readonly refillPerSecond: number,
+      private readonly clock: Clock = new Clock(),
+    ) {
+      this.tokens = capacity;
+  [trim-compaction truncated 864 chars of this tool result; re-run the
   tool if needed]
 ```
 
-The fact that Claude read the file, and anything it said about it afterwards
-("the server reads config from `startServer`..."), is untouched. Only the raw
-file text past the first 300 characters is gone — Claude re-reads the file if
-it needs those exact lines again.
+The 864 cut characters aren't boilerplate. They're `tryAcquire`, `refill`,
+`availableTokens`, and `reset`, which is most of the file's actual behavior.
+The first 300 characters are never "the important part"; they just happen to
+be whatever comes first (here, the constructor).
+
+**Why that's fine to cut.** This only happens once the call is no longer one
+of the newest 6 messages, meaning the conversation has already moved past it.
+By then, Claude has already done something with that file: explained what it
+found, pointed out a bug, or made an edit. That explanation stays in the
+conversation word for word, untouched. The raw file text sitting in the old
+tool result is just a second copy of something that's either already acted
+on, or still sitting unchanged on disk, one `Read` away if it's ever actually
+needed again. Across 3,300 old tool calls and edits from real sessions,
+hand-labelled with hindsight by Claude itself, that turned out to be true for
+99.4% of them; only 19 were ever needed in full again.
 
 **An edit.** Claude changes a function. The call that made the change is
 long, so once it's old enough its text is replaced with a stub, but the file
@@ -81,7 +132,7 @@ After:
 
 Your instruction ("add validation to parseConfig") and Claude's explanation
 of what it changed stay word for word in the conversation. Only the literal
-before/after code text of the edit itself is replaced — the current code is
+before/after code text of the edit itself is replaced. The current code is
 in the file, not the chat history, so that's where Claude looks if it needs
 it again.
 
@@ -91,7 +142,7 @@ Each tool call and edit in the transcript is a separate JSON record, so the
 hook can rewrite the long text fields of old records in place without
 touching anything else: the surrounding messages, their order, and anything
 inside the newest 6 messages are left exactly as they were. No model reads or
-rewrites the conversation — it's plain string truncation, which is why it
+rewrites the conversation. It's plain string truncation, which is why it
 runs in milliseconds.
 
 Measured on four long real sessions (376 to 974 tool calls), with the default
