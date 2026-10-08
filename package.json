@@ -12,6 +12,7 @@
     "test": "vitest run",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.hooks.json",
     "dry-run": "tsx scripts/dry-run.ts",
+    "gen-example": "tsx scripts/generate-example-session.ts",
     "validate:plugin": "claude plugin validate ."
   },
   "devDependencies": {

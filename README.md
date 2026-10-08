@@ -136,6 +136,43 @@ before/after code text of the edit itself is replaced. The current code is
 in the file, not the chat history, so that's where Claude looks if it needs
 it again.
 
+**See it for yourself.** [`examples/session.jsonl`](examples/session.jsonl)
+is a small made-up session in the same format Claude Code writes.
+[`examples/session.trimmed.jsonl`](examples/session.trimmed.jsonl) is the
+actual output of running this plugin's `trimTranscript()` on it (via
+`npm run gen-example`), not a hand-written mock. The one call long enough to
+trim is the `Read` of `src/rateLimiter.ts`: line 4 of `session.jsonl`, line 3
+of `session.trimmed.jsonl` (the trimmed file doesn't carry Claude Code's own
+summary line, which this plugin leaves alone):
+
+```text
+session.jsonl, line 4 (the real line, quoted verbatim up to the cut point):
+  {"type":"user","message":{"role":"user","content":[{"type":"tool_result",
+  "tool_use_id":"t1","content":"import { Clock } from \"./clock\";\n\n
+  export class RateLimiter {\n  private tokens: number;\n  private
+  lastRefill: number;\n\n  constructor(\n    private readonly capacity:
+  number,\n    private readonly refillPerSecond: number,\n    private
+  readonly clock: Clock = new Clock(),\n  ) {\n    this.tokens = capacity;
+  \n    this.lastRefill = clock.now();\n  }\n\n  /** Consumes `cost` tokens
+  if available ... [continues for 1,164 characters total: tryAcquire,
+  refill, availableTokens, reset]\n}\n"}]}}
+
+session.trimmed.jsonl, line 3 (the real line, quoted in full):
+  {"type":"user","message":{"role":"user","content":[{"type":"tool_result",
+  "tool_use_id":"t1","content":"import { Clock } from \"./clock\";\n\n
+  export class RateLimiter {\n  private tokens: number;\n  private
+  lastRefill: number;\n\n  constructor(\n    private readonly capacity:
+  number,\n    private readonly refillPerSecond: number,\n    private
+  readonly clock: Clock = new Clock(),\n  ) {\n    this.tokens = capacity;
+  \n[trim-compaction truncated 864 chars of this tool result; re-run the
+  tool if needed]"}]}}
+```
+
+Everything else in that session, the bug report, the test failure, the fix,
+the explanation, the follow-up question, is short enough or recent enough to
+stay untouched; `diff examples/session.jsonl examples/session.trimmed.jsonl`
+shows only that one tool result changing (plus the missing summary line).
+
 ### How
 
 Each tool call and edit in the transcript is a separate JSON record, so the
@@ -284,8 +321,9 @@ hooks/                the hook: trim, then verbatim or summary of the trimmed hi
 src/trim.ts           the trimming rules
 src/messages.ts       transcript types and tool-call pairing
 src/transcript.ts     reads Claude Code .jsonl transcripts
-scripts/              dry run, transcript anonymizer (development only)
+scripts/              dry run, transcript anonymizer, example generator (development only)
 tests/                tests, with an anonymized real session as a fixture
+examples/             a before/after session pair referenced from this README
 docs/laya-study.md    why the plugin uses no model
 ```
 
